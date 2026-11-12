@@ -1,0 +1,47 @@
+<!-- Figma Bridge Plugin (UI thread): owns the WebSocket to the local MCP server and relays messages. -->
+<style>
+	body { margin: 0; font: 12px/1.4 Inter, system-ui, sans-serif; color: var(--figma-color-text); background: var(--figma-color-bg); }
+	.row { display: flex; align-items: center; gap: 8px; padding: 10px 12px; }
+	.dot { width: 10px; height: 10px; border-radius: 50%; background: #E8322B; flex: none; }
+	.dot.on { background: #3FCB6A; }
+	.sub { opacity: 0.6; font-size: 11px; padding: 0 12px; }
+</style>
+<div class="row"><div id="dot" class="dot"></div><b id="state">Connecting…</b></div>
+<div class="sub" id="sub">ws://localhost:3056 · leave this open</div>
+<script>
+	const URL_ = "ws://localhost:3056";
+	let ws = null, info = null, calls = 0;
+	const dot = document.getElementById("dot"), state = document.getElementById("state"), sub = document.getElementById("sub");
+
+	// Base64 in chunks so large PNG exports don't overflow the call stack.
+	function toBase64(bytes)
+	{
+		let s = "";
+		for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+		return btoa(s);
+	}
+
+	function connect()
+	{
+		try { ws = new WebSocket(URL_); }
+		catch (err) { state.textContent = "Blocked"; sub.textContent = String(err && err.message || err).slice(0, 120); setTimeout(connect, 3000); return; }
+		ws.onopen = () => { dot.classList.add("on"); state.textContent = "Connected to Claude"; ws.send(JSON.stringify({ type: "hello", info })); };
+		ws.onclose = () => { dot.classList.remove("on"); state.textContent = "Waiting for MCP server…"; setTimeout(connect, 2000); };
+		ws.onerror = () => { sub.textContent = "socket error (is Claude running?) · retrying"; };
+		ws.onmessage = (e) => { calls++; sub.textContent = `${calls} request${calls === 1 ? "" : "s"} handled`; parent.postMessage({ pluginMessage: JSON.parse(e.data) }, "*"); };
+	}
+
+	onmessage = (e) =>
+	{
+		const msg = e.data.pluginMessage;
+		if (!msg) return;
+		if (msg.type === "info") { info = msg.info; if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: "hello", info })); return; }
+		if (msg.type !== "reply" || !ws || ws.readyState !== 1) return;
+		if (msg.ok && msg.result && msg.result.bytes) { msg.result.base64 = toBase64(msg.result.bytes); delete msg.result.bytes; }
+		ws.send(JSON.stringify(msg));
+	};
+
+	// Connect immediately; file info is sent whenever the main thread reports it.
+	connect();
+	parent.postMessage({ pluginMessage: { type: "ui-ready" } }, "*");
+</script>

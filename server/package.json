@@ -1,0 +1,15 @@
+{
+  "name": "figma-bridge-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Local MCP server that drives the Figma desktop app through a companion dev plugin over a localhost WebSocket.",
+  "main": "index.js",
+  "license": "MIT",
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "ws": "^8.22.1",
+    "zod": "^4.6.7"
+  }
+}
